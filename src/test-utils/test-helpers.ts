@@ -531,6 +531,7 @@ export async function stackStxWithRosetta(opts: {
   cycleCount: number;
   ustxAmount: bigint;
   signerKey: string;
+  signerPrivKey: string;
 }) {
   const rosettaNetwork: NetworkIdentifier = {
     blockchain: RosettaConstants.blockchain,
@@ -552,6 +553,7 @@ export async function stackStxWithRosetta(opts: {
         number_of_cycles: opts.cycleCount,
         pox_addr: opts.btcAddr,
         signer_key: opts.signerKey,
+        signer_private_key: opts.signerPrivKey,
       },
     },
     {
