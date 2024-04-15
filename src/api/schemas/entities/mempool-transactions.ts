@@ -37,7 +37,6 @@ const AbstractMempoolTransactionSchema = Type.Intersect([
       }),
     },
     {
-      additionalProperties: false,
       title: 'AbstractMempoolTransaction',
       description:
         'Abstract transaction. This schema makes up all properties common between all Stacks 2.0 transaction types',

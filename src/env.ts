@@ -23,7 +23,7 @@ const schema = Type.Object({
   ),
 
   PG_HOST: Type.String({ default: '127.0.0.1' }),
-  PG_PORT: Type.Integer({ default: 5432, minimum: 0, maximum: 65535 }),
+  PG_PORT: Type.Integer({ default: 5490, minimum: 0, maximum: 65535 }),
   PG_USER: Type.String({ default: 'postgres' }),
   PG_PASSWORD: Type.String({ default: 'postgres' }),
   PG_DATABASE: Type.String({ default: 'stacks_blockchain_api' }),
@@ -35,6 +35,8 @@ const schema = Type.Object({
   PG_MAX_LIFETIME: Type.Integer({ default: 60 }),
   /** Seconds before force-ending running queries on connection close */
   PG_CLOSE_TIMEOUT: Type.Integer({ default: 5 }),
+  /** Seconds before force-ending running queries */
+  PG_STATEMENT_TIMEOUT: Type.Integer({ default: 0 }),
   /** Limit to how many concurrent connections can be created */
   PG_CONNECTION_POOL_MAX: Type.Integer({ default: 10 }),
   /** Can be any string, use to specify a use case specific to a deployment */
@@ -52,16 +54,17 @@ const schema = Type.Object({
   // Any value not provided here will fall back to the default equivalent above.
 
   PG_PRIMARY_HOST: Type.Optional(Type.String()),
-  PG_PRIMARY_PORT: Type.Optional(Type.Integer({ default: 5432, minimum: 0, maximum: 65535 })),
+  PG_PRIMARY_PORT: Type.Optional(Type.Integer({ minimum: 0, maximum: 65535 })),
   PG_PRIMARY_USER: Type.Optional(Type.String()),
   PG_PRIMARY_PASSWORD: Type.Optional(Type.String()),
   PG_PRIMARY_DATABASE: Type.Optional(Type.String()),
   PG_PRIMARY_SCHEMA: Type.Optional(Type.String()),
-  PG_PRIMARY_SSL: Type.Optional(Type.Boolean({ default: false })),
-  PG_PRIMARY_IDLE_TIMEOUT: Type.Optional(Type.Integer({ default: 30 })),
-  PG_PRIMARY_MAX_LIFETIME: Type.Optional(Type.Integer({ default: 60 })),
-  PG_PRIMARY_CLOSE_TIMEOUT: Type.Optional(Type.Integer({ default: 5 })),
-  PG_PRIMARY_CONNECTION_POOL_MAX: Type.Optional(Type.Integer({ default: 10 })),
+  PG_PRIMARY_SSL: Type.Optional(Type.Boolean()),
+  PG_PRIMARY_IDLE_TIMEOUT: Type.Optional(Type.Integer()),
+  PG_PRIMARY_MAX_LIFETIME: Type.Optional(Type.Integer()),
+  PG_PRIMARY_CLOSE_TIMEOUT: Type.Optional(Type.Integer()),
+  PG_PRIMARY_STATEMENT_TIMEOUT: Type.Optional(Type.Integer()),
+  PG_PRIMARY_CONNECTION_POOL_MAX: Type.Optional(Type.Integer()),
   PG_PRIMARY_CONNECTION_URI: Type.Optional(Type.String()),
 
   /**
@@ -82,7 +85,7 @@ const schema = Type.Object({
    * If specified, an http server providing profiling capability endpoints will be opened on the
    * given port. This port should not be publicly exposed.
    */
-  STACKS_PROFILER_PORT: Type.Optional(Type.Integer({ default: 9119 })),
+  STACKS_PROFILER_PORT: Type.Optional(Type.Integer()),
 
   STACKS_CORE_EVENT_HOST: Type.String({ default: '127.0.0.1' }),
   STACKS_CORE_EVENT_PORT: Type.Integer({ default: 3700, minimum: 0, maximum: 65535 }),

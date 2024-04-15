@@ -1,7 +1,8 @@
 import { parseDbMempoolTx, searchTx, searchTxs, parseDbTx } from '../controllers/db-controller';
 import { getPagingQueryLimit, ResourceType } from '../pagination';
 import { Optional, PaginatedResponse, has0xPrefix } from '@hirosystems/api-toolkit';
-import { Type, TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import { Type } from '@sinclair/typebox';
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { FastifyPluginAsync, FastifyPluginCallback } from 'fastify';
 import { Server } from 'http';
 import {
@@ -11,7 +12,6 @@ import {
 } from '../controllers/cache';
 import {
   AddressParamSchema,
-  BlockHashSchema,
   BlockHeightSchema,
   LimitParam,
   MempoolOrderByParamSchema,
@@ -130,7 +130,7 @@ const ChainTipRoutes: FastifyPluginCallback<Record<never, never>, Server, TypeBo
         Retrieves a list of all transactions within a block for a given block hash.`,
         tags: ['Transactions'],
         params: Type.Object({
-          block_hash: BlockHashSchema,
+          block_hash: Type.String(),
         }),
         querystring: Type.Object({
           offset: OffsetParam(),

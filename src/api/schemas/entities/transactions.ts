@@ -44,7 +44,6 @@ export const BaseTransactionSchema = Type.Object(
     ),
   },
   {
-    additionalProperties: false,
     title: 'BaseTransaction',
     description:
       'Transaction properties that are available from a raw serialized transactions. These are available for transactions in the mempool as well as mined transactions.',
@@ -170,7 +169,6 @@ export const TokenTransferTransactionMetadataSchema = Type.Object(
     }),
   },
   {
-    additionalProperties: false,
     title: 'TokenTransferTransactionMetadata',
     description: 'Metadata associated with token-transfer type transactions',
   }
@@ -205,7 +203,6 @@ export const SmartContractTransactionMetadataSchema = Type.Object(
     }),
   },
   {
-    additionalProperties: false,
     title: 'SmartContractTransactionMetadata',
     description:
       'Metadata associated with a contract-deploy type transaction. https://github.com/blockstack/stacks-blockchain/blob/master/sip/sip-005-blocks-and-transactions.md#type-1-instantiating-a-smart-contract',
@@ -253,7 +250,6 @@ export const ContractCallTransactionMetadataSchema = Type.Object(
     }),
   },
   {
-    additionalProperties: false,
     title: 'ContractCallTransactionMetadata',
     description: 'Metadata associated with a contract-call type transaction',
   }
@@ -278,7 +274,6 @@ export const PoisonMicroblockTransactionMetadataSchema = Type.Object(
     }),
   },
   {
-    additionalProperties: false,
     title: 'PoisonMicroblockTransactionMetadata',
     description: 'Metadata associated with a poison-microblock type transaction',
   }
@@ -318,7 +313,6 @@ export const CoinbaseTransactionMetadataSchema = Type.Object(
     }),
   },
   {
-    additionalProperties: false,
     title: 'CoinbaseTransaction',
     description: 'Metadata associated with a coinbase type transaction',
   }
@@ -362,7 +356,6 @@ export const TenureChangeTransactionMetadataSchema = Type.Object(
     }),
   },
   {
-    additionalProperties: false,
     title: 'TenureChangeTransaction',
     description: 'Describes representation of a Type 7 Stacks transaction: Tenure Change',
   }
@@ -401,7 +394,6 @@ export const TransactionFoundSchema = Type.Object(
   },
   {
     title: 'TransactionFound',
-    additionalProperties: false,
     description: 'This object returns transaction for found true',
   }
 );
@@ -416,7 +408,6 @@ export const TransactionNotFoundSchema = Type.Object(
   },
   {
     title: 'TransactionNotFound',
-    additionalProperties: false,
     description: 'This object returns the id for not found transaction',
   }
 );

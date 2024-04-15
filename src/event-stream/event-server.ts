@@ -83,6 +83,7 @@ import { logger, loggerMiddleware } from '../logger';
 import * as zoneFileParser from 'zone-file';
 import { hexToBuffer, isProdEnv, stopwatch } from '@hirosystems/api-toolkit';
 import { POX_2_CONTRACT_NAME, POX_3_CONTRACT_NAME, POX_4_CONTRACT_NAME } from '../pox-helpers';
+import { ENV } from 'src/env';
 
 const IBD_PRUNABLE_ROUTES = ['/new_mempool_tx', '/drop_mempool_tx', '/new_microblocks'];
 
@@ -908,17 +909,8 @@ export async function startEventServer(opts: {
   const db = opts.datastore;
   const messageHandler = opts.messageHandler ?? createMessageProcessorQueue();
 
-  let eventHost = opts.serverHost ?? process.env['STACKS_CORE_EVENT_HOST'];
-  const eventPort = opts.serverPort ?? parseInt(process.env['STACKS_CORE_EVENT_PORT'] ?? '', 10);
-  if (!eventHost) {
-    throw new Error(
-      `STACKS_CORE_EVENT_HOST must be specified, e.g. "STACKS_CORE_EVENT_HOST=127.0.0.1"`
-    );
-  }
-  if (!Number.isInteger(eventPort)) {
-    throw new Error(`STACKS_CORE_EVENT_PORT must be specified, e.g. "STACKS_CORE_EVENT_PORT=3700"`);
-  }
-
+  let eventHost = opts.serverHost ?? ENV.STACKS_CORE_EVENT_HOST;
+  const eventPort = opts.serverPort ?? ENV.STACKS_CORE_EVENT_PORT;
   if (eventHost.startsWith('http:')) {
     const { hostname } = new URL(eventHost);
     eventHost = hostname;
@@ -1079,7 +1071,7 @@ export async function startEventServer(opts: {
     server.once('error', error => {
       reject(error);
     });
-    server.listen(eventPort, eventHost as string, () => {
+    server.listen(eventPort, eventHost, () => {
       resolve();
     });
   });

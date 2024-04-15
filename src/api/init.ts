@@ -56,9 +56,9 @@ export async function buildApiServer(args: {
 
   fastify.decorate('db', args.datastore);
   fastify.decorate('writeDb', args.writeDatastore);
-  if (isProdEnv) {
-    await fastify.register(FastifyMetrics, { endpoint: null });
-  }
+  // if (isProdEnv) {
+  //   await fastify.register(FastifyMetrics, { endpoint: null });
+  // }
   await fastify.register(FastifyCors, { exposedHeaders: ['X-API-Version'] });
 
   fastify.get('/', async (request, reply) => {

@@ -1,11 +1,5 @@
 import * as assert from 'assert';
-import {
-  getOrAdd,
-  I32_MAX,
-  getIbdBlockHeight,
-  getUintEnvOrDefault,
-  unwrapOptionalProp,
-} from '../helpers';
+import { getOrAdd, I32_MAX, getIbdBlockHeight, getUintEnvOrDefault } from '../helpers';
 import {
   DbBlock,
   DbTx,

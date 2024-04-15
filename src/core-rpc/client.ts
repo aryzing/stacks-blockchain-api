@@ -5,6 +5,7 @@ import { CoreNodeFeeResponse } from '@stacks/stacks-blockchain-api-types';
 import { ClarityValue, cvToHex } from '@stacks/transactions';
 import { logger } from '../logger';
 import { stopwatch, timeout } from '@hirosystems/api-toolkit';
+import { ENV } from 'src/env';
 
 interface CoreRpcAccountInfo {
   /** Hex-prefixed uint128. */
@@ -115,11 +116,11 @@ interface CoreRpcNeighbors {
 type RequestOpts = RequestInit & { queryParams?: Record<string, string> };
 
 export function getCoreNodeEndpoint(opts?: { host?: string; port?: number | string }) {
-  const host = opts?.host ?? process.env['STACKS_CORE_RPC_HOST'];
+  const host = opts?.host ?? ENV.STACKS_CORE_RPC_HOST;
   if (!host) {
     throw new Error(`STACKS_CORE_RPC_HOST is not defined`);
   }
-  const port = parsePort(opts?.port ?? process.env['STACKS_CORE_RPC_PORT']);
+  const port = parsePort(opts?.port ?? ENV.STACKS_CORE_RPC_PORT);
   if (!port) {
     throw new Error(`STACKS_CORE_RPC_PORT is not defined`);
   }
