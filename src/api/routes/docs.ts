@@ -2,7 +2,7 @@ import { isProdEnv } from '@hirosystems/api-toolkit';
 import { FastifyPluginCallback } from 'fastify';
 import { Server } from 'http';
 import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
-import { ENV } from 'src/env';
+import { ENV } from '../../env';
 import * as path from 'path';
 import * as fs from 'fs';
 

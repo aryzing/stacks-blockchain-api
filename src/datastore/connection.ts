@@ -1,5 +1,5 @@
 import { PgConnectionArgs, PgConnectionOptions } from '@hirosystems/api-toolkit';
-import { ENV } from 'src/env';
+import { ENV } from '../env';
 
 /**
  * The postgres server being used for a particular connection, transaction or query.

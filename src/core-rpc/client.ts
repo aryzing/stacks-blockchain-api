@@ -5,7 +5,7 @@ import { CoreNodeFeeResponse } from '@stacks/stacks-blockchain-api-types';
 import { ClarityValue, cvToHex } from '@stacks/transactions';
 import { logger } from '../logger';
 import { stopwatch, timeout } from '@hirosystems/api-toolkit';
-import { ENV } from 'src/env';
+import { ENV } from '../env';
 
 interface CoreRpcAccountInfo {
   /** Hex-prefixed uint128. */
