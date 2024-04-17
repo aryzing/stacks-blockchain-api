@@ -71,7 +71,7 @@ import {
   AbstractMempoolTransaction,
   MempoolTransaction,
 } from '../schemas/entities/mempool-transactions';
-import { TransactionSearchResponse } from '../schemas/responses';
+import { TransactionSearchResponse } from '../schemas/responses/responses';
 
 export function parseTxTypeStrings(values: string[]): TransactionType[] {
   return values.map(v => {

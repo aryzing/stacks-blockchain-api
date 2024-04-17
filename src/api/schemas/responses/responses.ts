@@ -1,7 +1,7 @@
 import { Nullable, Optional } from '@hirosystems/api-toolkit';
 import { Static, Type } from '@sinclair/typebox';
-import { TransactionSearchResultSchema } from './entities/transactions';
-import { MempoolStatsSchema } from './entities/mempool-transactions';
+import { TransactionSearchResultSchema } from '../entities/transactions';
+import { MempoolStatsSchema } from '../entities/mempool-transactions';
 
 export const ErrorResponseSchema = Type.Object(
   {
