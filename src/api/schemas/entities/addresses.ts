@@ -124,50 +124,54 @@ export const AddressTransactionWithTransfersSchema = Type.Object(
         ),
       })
     ),
-    ft_transfers: Type.Array(
-      Type.Object({
-        amount: Type.String({
-          description:
-            'Amount transferred as an integer string. This balance does not factor in possible SIP-010 decimals.',
-        }),
-        asset_identifier: Type.String({
-          description: 'Fungible Token asset identifier.',
-        }),
-        sender: Optional(
-          Type.String({
-            description: 'Principal that sent the asset.',
-          })
-        ),
-        recipient: Optional(
-          Type.String({
-            description: 'Principal that received the asset.',
-          })
-        ),
-      })
+    ft_transfers: Optional(
+      Type.Array(
+        Type.Object({
+          amount: Type.String({
+            description:
+              'Amount transferred as an integer string. This balance does not factor in possible SIP-010 decimals.',
+          }),
+          asset_identifier: Type.String({
+            description: 'Fungible Token asset identifier.',
+          }),
+          sender: Optional(
+            Type.String({
+              description: 'Principal that sent the asset.',
+            })
+          ),
+          recipient: Optional(
+            Type.String({
+              description: 'Principal that received the asset.',
+            })
+          ),
+        })
+      )
     ),
-    nft_transfers: Type.Array(
-      Type.Object({
-        value: Type.Object(
-          {
-            hex: Type.String(),
-            repr: Type.String(),
-          },
-          { description: 'Non Fungible Token asset value.' }
-        ),
-        asset_identifier: Type.String({
-          description: 'Non Fungible Token asset identifier.',
-        }),
-        sender: Optional(
-          Type.String({
-            description: 'Principal that sent the asset.',
-          })
-        ),
-        recipient: Optional(
-          Type.String({
-            description: 'Principal that received the asset.',
-          })
-        ),
-      })
+    nft_transfers: Optional(
+      Type.Array(
+        Type.Object({
+          value: Type.Object(
+            {
+              hex: Type.String(),
+              repr: Type.String(),
+            },
+            { description: 'Non Fungible Token asset value.' }
+          ),
+          asset_identifier: Type.String({
+            description: 'Non Fungible Token asset identifier.',
+          }),
+          sender: Optional(
+            Type.String({
+              description: 'Principal that sent the asset.',
+            })
+          ),
+          recipient: Optional(
+            Type.String({
+              description: 'Principal that received the asset.',
+            })
+          ),
+        })
+      )
     ),
   },
   {

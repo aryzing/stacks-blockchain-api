@@ -22,17 +22,17 @@ import {
   UnanchoredParamSchema,
 } from '../schemas/params';
 import { TransactionSchema, TransactionTypeSchema } from '../schemas/entities/transactions';
-import {
-  ErrorResponseSchema,
-  MempoolStatsResponseSchema,
-  RawTransactionResponseSchema,
-  TransactionSearchResponseSchema,
-} from '../schemas/responses';
 import { MempoolTransactionSchema } from '../schemas/entities/mempool-transactions';
 import {
   TransactionEventSchema,
   TransactionEventTypeSchema,
 } from '../schemas/entities/transaction-events';
+import {
+  ErrorResponseSchema,
+  MempoolStatsResponseSchema,
+  TransactionSearchResponseSchema,
+  RawTransactionResponseSchema,
+} from '../schemas/responses/responses';
 
 const ChainTipRoutes: FastifyPluginCallback<Record<never, never>, Server, TypeBoxTypeProvider> = (
   fastify,

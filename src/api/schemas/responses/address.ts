@@ -1,4 +1,4 @@
-import { PaginatedResponse } from '@hirosystems/api-toolkit';
+import { Optional, PaginatedResponse } from '@hirosystems/api-toolkit';
 import { Static, Type } from '@sinclair/typebox';
 import { TransactionEventSchema } from '../entities/transaction-events';
 import { FtBalanceSchema, NftBalanceSchema, StxBalanceSchema } from '../entities/balances';
@@ -20,16 +20,19 @@ export type AddressAssetsListResponse = Static<typeof AddressAssetsListResponseS
 export const AddressBalanceResponseSchema = Type.Object(
   {
     stx: StxBalanceSchema,
-    fungible_tokens: Type.Array(FtBalanceSchema),
-    non_fungible_tokens: Type.Array(NftBalanceSchema),
-    token_offering_locked: AddressTokenOfferingLockedSchema,
+    fungible_tokens: Type.Record(Type.String(), FtBalanceSchema),
+    non_fungible_tokens: Type.Record(Type.String(), NftBalanceSchema),
+    token_offering_locked: Optional(AddressTokenOfferingLockedSchema),
   },
   { title: 'AddressBalanceResponse', description: 'GET request that returns address balances' }
 );
 export type AddressBalanceResponse = Static<typeof AddressBalanceResponseSchema>;
 
 export const AddressStxBalanceResponseSchema = Type.Intersect(
-  [StxBalanceSchema, AddressTokenOfferingLockedSchema],
+  [
+    StxBalanceSchema,
+    Type.Object({ token_offering_locked: Optional(AddressTokenOfferingLockedSchema) }),
+  ],
   { title: 'AddressStxBalanceResponse', description: 'GET request that returns address balances' }
 );
 export type AddressStxBalanceResponse = Static<typeof AddressStxBalanceResponseSchema>;

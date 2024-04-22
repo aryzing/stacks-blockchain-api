@@ -1,4 +1,3 @@
-import * as express from 'express';
 import { asyncHandler } from '../async-handler';
 import * as Bluebird from 'bluebird';
 import { BlockIdentifier } from '../../datastore/common';
@@ -9,7 +8,12 @@ import {
   parseUntilBlockQuery,
   validatePrincipal,
 } from '../query-helpers';
-import { ChainID, formatMapToObject, getSendManyContract, isValidPrincipal } from '../../helpers';
+import {
+  formatMapToObject,
+  getSendManyContract,
+  isValidPrincipal,
+  normalizeHashString,
+} from '../../helpers';
 import {
   getTxFromDataStore,
   parseDbEvent,
@@ -17,90 +21,85 @@ import {
   parseDbTx,
 } from '../controllers/db-controller';
 import { InvalidRequestError, InvalidRequestErrorType } from '../../errors';
-import {
-  TransactionResults,
-  TransactionEvent,
-  AddressBalanceResponse,
-  AddressStxBalanceResponse,
-  AddressStxInboundListResponse,
-  InboundStxTransfer,
-  MempoolTransactionListResponse,
-  AddressTransactionWithTransfers,
-  AddressTransactionsWithTransfersListResponse,
-  AddressNonces,
-} from '@stacks/stacks-blockchain-api-types';
 import { decodeClarityValueToRepr } from 'stacks-encoding-native-js';
 import { validate } from '../validate';
-import { NextFunction, Request, Response } from 'express';
-import {
-  ETagType,
-  getETagCacheHandler,
-  setETagCacheHeaders,
-} from '../controllers/express-cache-controller';
-import { PgStore } from '../../datastore/pg-store';
+import { ETagType, setETagCacheHeaders } from '../controllers/express-cache-controller';
 import { logger } from '../../logger';
-import { has0xPrefix, isProdEnv } from '@hirosystems/api-toolkit';
+import { has0xPrefix, isProdEnv, Optional, PgSqlClient } from '@hirosystems/api-toolkit';
+import { FastifyPluginAsync, FastifyPluginCallback } from 'fastify';
+import { Server } from 'http';
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import { Type } from '@sinclair/typebox';
+import { handleChainTipCache } from '../controllers/cache';
+import {
+  BlockHeightSchema,
+  LimitParam,
+  OffsetParam,
+  PrincipalSchema,
+  TransactionIdParamSchema,
+  UnanchoredParamSchema,
+} from '../schemas/params';
+import {
+  AddressBalanceResponse,
+  AddressBalanceResponseSchema,
+  AddressStxBalanceResponse,
+  AddressStxBalanceResponseSchema,
+  AddressTransactionsListResponseSchema,
+} from '../schemas/responses/address';
+import { PgStore } from 'src/datastore/pg-store';
+import { AddressTransactionWithTransfersSchema } from '../schemas/entities/addresses';
+import { ErrorResponseSchema } from '../schemas/responses/responses';
 
 async function getBlockHeight(
-  untilBlock: number | string | undefined,
-  req: Request,
-  res: Response,
-  next: NextFunction,
-  db: PgStore
+  db: PgStore,
+  sql: PgSqlClient,
+  untilBlock?: number,
+  unanchored?: boolean
 ): Promise<number> {
-  let blockHeight = 0;
-  if (typeof untilBlock === 'number') {
-    blockHeight = untilBlock;
-  } else if (typeof untilBlock === 'string') {
-    const block = await db.getBlock({ hash: untilBlock });
-    if (!block.found) {
-      const error = `block not found with hash ${untilBlock}`;
-      res.status(404).json({ error: error });
-      next(error);
-      throw new Error(error);
-    }
-    blockHeight = block.result.block_height;
-  } else {
-    const includeUnanchored = isUnanchoredRequest(req, res, next);
-    const currentBlockHeight = await db.getCurrentBlockHeight();
-    if (!currentBlockHeight.found) {
-      const error = `no current block`;
-      res.status(404).json({ error: error });
-      next(error);
-      throw new Error(error);
-    }
-
-    blockHeight = currentBlockHeight.result + (includeUnanchored ? 1 : 0);
-  }
-
-  return blockHeight;
+  return (untilBlock ?? (await db.getChainTip(sql)).block_height) + (unanchored ? 1 : 0);
 }
 
-interface AddressAssetEvents {
-  results: TransactionEvent[];
-  limit: number;
-  offset: number;
-  total: number;
-}
+const ChainTipRoutes: FastifyPluginCallback<Record<never, never>, Server, TypeBoxTypeProvider> = (
+  fastify,
+  _,
+  done
+) => {
+  fastify.addHook('preHandler', handleChainTipCache);
 
-export function createAddressRouter(db: PgStore, chainId: ChainID): express.Router {
-  const router = express.Router();
-  const cacheHandler = getETagCacheHandler(db);
-  const mempoolCacheHandler = getETagCacheHandler(db, ETagType.mempool);
-
-  router.get(
+  fastify.get(
     '/:stx_address/stx',
-    cacheHandler,
-    asyncHandler(async (req, res, next) => {
-      const stxAddress = req.params['stx_address'];
-      validatePrincipal(stxAddress);
-      const untilBlock = parseUntilBlockQuery(req, res, next);
-
-      const result = await db.sqlTransaction(async sql => {
-        const blockHeight = await getBlockHeight(untilBlock, req, res, next, db);
-        // Get balance info for STX token
-        const stxBalanceResult = await db.getStxBalanceAtBlock(stxAddress, blockHeight);
-        const tokenOfferingLocked = await db.getTokenOfferingLocked(stxAddress, blockHeight);
+    {
+      schema: {
+        operationId: 'get_account_stx_balance',
+        summary: 'Get account STX balance',
+        description: `Retrieves STX token balance for a given Address or Contract Identifier.`,
+        tags: ['Accounts'],
+        params: Type.Object({
+          stx_address: PrincipalSchema,
+        }),
+        querystring: Type.Object({
+          unanchored: Optional(UnanchoredParamSchema),
+          until_block: Optional(BlockHeightSchema),
+        }),
+        response: {
+          200: AddressStxBalanceResponseSchema,
+        },
+      },
+    },
+    async (req, res) => {
+      const stxAddress = req.params.stx_address;
+      const result = await fastify.db.sqlTransaction(async sql => {
+        const blockHeight = await getBlockHeight(
+          fastify.db,
+          sql,
+          req.query.until_block,
+          req.query.unanchored
+        );
+        const stxBalanceResult = await fastify.db.getStxBalanceAtBlock(stxAddress, blockHeight);
+        const tokenOfferingLocked = await fastify.db.getTokenOfferingLocked(
+          stxAddress,
+          blockHeight
+        );
         const result: AddressStxBalanceResponse = {
           balance: stxBalanceResult.balance.toString(),
           total_sent: stxBalanceResult.totalSent.toString(),
@@ -118,29 +117,49 @@ export function createAddressRouter(db: PgStore, chainId: ChainID): express.Rout
         }
         return result;
       });
-      setETagCacheHeaders(res);
-      res.json(result);
-    })
+      await res.send(result);
+    }
   );
 
-  // get balances for STX, FTs, and counts for NFTs
-  router.get(
+  fastify.get(
     '/:stx_address/balances',
-    cacheHandler,
-    asyncHandler(async (req, res, next) => {
-      const stxAddress = req.params['stx_address'];
-      validatePrincipal(stxAddress);
-      const untilBlock = parseUntilBlockQuery(req, res, next);
-
-      const result = await db.sqlTransaction(async sql => {
-        const blockHeight = await getBlockHeight(untilBlock, req, res, next, db);
+    {
+      schema: {
+        operationId: 'get_account_balance',
+        summary: 'Get account balances',
+        description: `Retrieves total account balance information for a given Address or Contract Identifier. This includes the balances of  STX Tokens, Fungible Tokens and Non-Fungible Tokens for the account.`,
+        tags: ['Accounts'],
+        params: Type.Object({
+          stx_address: PrincipalSchema,
+        }),
+        querystring: Type.Object({
+          unanchored: Optional(UnanchoredParamSchema),
+          until_block: Optional(BlockHeightSchema),
+        }),
+        response: {
+          200: AddressBalanceResponseSchema,
+        },
+      },
+    },
+    async (req, res) => {
+      const stxAddress = req.params.stx_address;
+      const result = await fastify.db.sqlTransaction(async sql => {
+        const blockHeight = await getBlockHeight(
+          fastify.db,
+          sql,
+          req.query.until_block,
+          req.query.unanchored
+        );
 
         // Get balance info for STX token
-        const stxBalanceResult = await db.getStxBalanceAtBlock(stxAddress, blockHeight);
-        const tokenOfferingLocked = await db.getTokenOfferingLocked(stxAddress, blockHeight);
+        const stxBalanceResult = await fastify.db.getStxBalanceAtBlock(stxAddress, blockHeight);
+        const tokenOfferingLocked = await fastify.db.getTokenOfferingLocked(
+          stxAddress,
+          blockHeight
+        );
 
         // Get balances for fungible tokens
-        const ftBalancesResult = await db.getFungibleTokenBalances({
+        const ftBalancesResult = await fastify.db.getFungibleTokenBalances({
           stxAddress,
           untilBlock: blockHeight,
         });
@@ -153,7 +172,7 @@ export function createAddressRouter(db: PgStore, chainId: ChainID): express.Rout
         });
 
         // Get counts for non-fungible tokens
-        const nftBalancesResult = await db.getNonFungibleTokenCounts({
+        const nftBalancesResult = await fastify.db.getNonFungibleTokenCounts({
           stxAddress,
           untilBlock: blockHeight,
         });
@@ -187,195 +206,222 @@ export function createAddressRouter(db: PgStore, chainId: ChainID): express.Rout
         }
         return result;
       });
-      setETagCacheHeaders(res);
-      res.json(result);
-    })
+      await res.send(result);
+    }
   );
 
-  /**
-   * Get recent STX transactions associated with a principal (stx address or contract id,
-   * sender or receiver).
-   */
-  router.get(
-    '/:principal/transactions',
-    cacheHandler,
-    asyncHandler(async (req, res, next) => {
-      const principal = req.params['principal'];
-      validatePrincipal(principal);
-      const untilBlock = parseUntilBlockQuery(req, res, next);
-      const limit = getPagingQueryLimit(ResourceType.Tx, req.query.limit);
-      const offset = parsePagingQueryInput(req.query.offset ?? 0);
+  // fastify.get(
+  //   '/:principal/transactions',
+  //   {
+  //     schema: {
+  //       deprecated: true,
+  //       operationId: 'get_account_transactions',
+  //       summary: 'Get account transactions',
+  //       description: `Retrieves a list of all Transactions for a given Address or Contract Identifier. More information on Transaction types can be found [here](https://docs.stacks.co/understand-stacks/transactions#types).
 
-      const response = await db.sqlTransaction(async sql => {
-        const blockParams = getBlockParams(req, res, next);
-        let atSingleBlock = false;
-        let blockHeight = 0;
-        if (blockParams.blockHeight) {
-          if (untilBlock) {
-            throw new InvalidRequestError(
-              `can't handle until_block and block_height in the same request`,
-              InvalidRequestErrorType.invalid_param
-            );
-          }
-          atSingleBlock = true;
-          blockHeight = blockParams.blockHeight;
-        } else {
-          blockHeight = await getBlockHeight(untilBlock, req, res, next, db);
-        }
+  //       If you need to actively monitor new transactions for an address or contract id, we highly recommend subscribing to [WebSockets or Socket.io](https://github.com/hirosystems/stacks-blockchain-api/tree/master/client) for real-time updates.`,
+  //       tags: ['Accounts'],
+  //       params: Type.Object({
+  //         principal: PrincipalSchema,
+  //       }),
+  //       querystring: Type.Object({
+  //         offset: OffsetParam(),
+  //         limit: LimitParam(ResourceType.Tx),
+  //         unanchored: Optional(UnanchoredParamSchema),
+  //         until_block: Optional(BlockHeightSchema),
+  //         height: Optional(BlockHeightSchema),
+  //       }),
+  //       response: {
+  //         200: AddressTransactionsListResponseSchema,
+  //       },
+  //     },
+  //   },
+  //   async (req, res) => {
+  //     const principal = req.params.principal;
+  //     const limit = req.query.limit ?? getPagingQueryLimit(ResourceType.Tx, req.query.limit);
+  //     const offset = req.query.offset ?? 0;
 
-        const { results: txResults, total } = await db.getAddressTxs({
-          stxAddress: principal,
-          limit,
-          offset,
-          blockHeight,
-          atSingleBlock,
-        });
-        const results = txResults.map(dbTx => parseDbTx(dbTx));
-        const response = { limit, offset, total, results };
-        return response;
-      });
-      setETagCacheHeaders(res);
-      res.json(response);
-    })
-  );
+  //     const response = await fastify.db.sqlTransaction(async sql => {
+  //       let atSingleBlock = false;
+  //       let blockHeight = 0;
+  //       if (req.query.height) {
+  //         if (req.query.until_block) {
+  //           throw new InvalidRequestError(
+  //             `can't handle until_block and block_height in the same request`,
+  //             InvalidRequestErrorType.invalid_param
+  //           );
+  //         }
+  //         atSingleBlock = true;
+  //         blockHeight = req.query.height;
+  //       } else {
+  //         blockHeight = await getBlockHeight(
+  //           fastify.db,
+  //           sql,
+  //           req.query.until_block,
+  //           req.query.unanchored
+  //         );
+  //       }
 
-  /**
-   * @deprecated See `/v2/addresses/:address/transactions/:tx_id`
-   */
-  router.get(
-    '/:stx_address/:tx_id/with_transfers',
-    cacheHandler,
-    asyncHandler(async (req, res) => {
-      const stxAddress = req.params['stx_address'];
-      let tx_id = req.params['tx_id'];
-      validatePrincipal(stxAddress);
-      if (!has0xPrefix(tx_id)) {
-        tx_id = '0x' + tx_id;
-      }
-      const result = await db.sqlTransaction(async sql => {
-        const results = await db.getInformationTxsWithStxTransfers({ stxAddress, tx_id });
-        if (results && results.tx) {
-          const txQuery = await getTxFromDataStore(db, {
-            txId: results.tx.tx_id,
-            dbTx: results.tx,
-            includeUnanchored: false,
-          });
-          if (!txQuery.found) {
-            throw new Error('unexpected tx not found -- fix tx enumeration query');
-          }
-          const result = {
-            tx: txQuery.result,
-            stx_sent: results.stx_sent.toString(),
-            stx_received: results.stx_received.toString(),
-            stx_transfers: results.stx_transfers.map(transfer => ({
-              amount: transfer.amount.toString(),
-              sender: transfer.sender,
-              recipient: transfer.recipient,
-            })),
-          };
-          return result;
-        }
-      });
-      if (result) {
-        setETagCacheHeaders(res);
-        res.json(result);
-      } else {
-        res.status(404).json({ error: 'No matching transaction found' });
-      }
-    })
-  );
+  //       const { results: txResults, total } = await fastify.db.getAddressTxs({
+  //         stxAddress: principal,
+  //         limit,
+  //         offset,
+  //         blockHeight,
+  //         atSingleBlock,
+  //       });
+  //       const results = txResults.map(dbTx => parseDbTx(dbTx));
+  //       const response = { limit, offset, total, results };
+  //       return response;
+  //     });
+  //     await res.send(response);
+  //   }
+  // );
+
+  // fastify.get(
+  //   '/:principal/:tx_id/with_transfers',
+  //   {
+  //     schema: {
+  //       deprecated: true,
+  //       operationId: 'get_single_transaction_with_transfers',
+  //       summary: 'Get account transaction information for specific transaction',
+  //       description: `Retrieves transaction details for a given Transaction Id \`tx_id\`, for a given account or contract Identifier.`,
+  //       tags: ['Accounts'],
+  //       params: Type.Object({
+  //         principal: PrincipalSchema,
+  //         tx_id: TransactionIdParamSchema,
+  //       }),
+  //       response: {
+  //         200: AddressTransactionWithTransfersSchema,
+  //         404: ErrorResponseSchema,
+  //       },
+  //     },
+  //   },
+  //   async (req, res) => {
+  //     const stxAddress = req.params.principal;
+  //     const tx_id = normalizeHashString(req.params.tx_id) as string;
+  //     const result = await fastify.db.sqlTransaction(async sql => {
+  //       const results = await fastify.db.getInformationTxsWithStxTransfers({ stxAddress, tx_id });
+  //       if (results && results.tx) {
+  //         const txQuery = await getTxFromDataStore(fastify.db, {
+  //           txId: results.tx.tx_id,
+  //           dbTx: results.tx,
+  //           includeUnanchored: false,
+  //         });
+  //         if (!txQuery.found) {
+  //           throw new Error('unexpected tx not found -- fix tx enumeration query');
+  //         }
+  //         const result = {
+  //           tx: txQuery.result,
+  //           stx_sent: results.stx_sent.toString(),
+  //           stx_received: results.stx_received.toString(),
+  //           stx_transfers: results.stx_transfers.map(transfer => ({
+  //             amount: transfer.amount.toString(),
+  //             sender: transfer.sender,
+  //             recipient: transfer.recipient,
+  //           })),
+  //         };
+  //         return result;
+  //       }
+  //     });
+  //     if (result) {
+  //       await res.send(result);
+  //     } else {
+  //       await res.status(404).send({ error: 'No matching transaction found' });
+  //     }
+  //   }
+  // );
 
   /**
    * @deprecated See `/v2/addresses/:address/transactions`
    */
-  router.get(
-    '/:stx_address/transactions_with_transfers',
-    cacheHandler,
-    asyncHandler(async (req, res, next) => {
-      const stxAddress = req.params['stx_address'];
-      validatePrincipal(stxAddress);
-      const untilBlock = parseUntilBlockQuery(req, res, next);
+  // router.get(
+  //   '/:stx_address/transactions_with_transfers',
+  //   cacheHandler,
+  //   asyncHandler(async (req, res, next) => {
+  //     const stxAddress = req.params['stx_address'];
+  //     validatePrincipal(stxAddress);
+  //     const untilBlock = parseUntilBlockQuery(req, res, next);
 
-      const response = await db.sqlTransaction(async sql => {
-        const blockParams = getBlockParams(req, res, next);
-        let atSingleBlock = false;
-        let blockHeight = 0;
-        if (blockParams.blockHeight) {
-          if (untilBlock) {
-            throw new InvalidRequestError(
-              `can't handle until_block and block_height in the same request`,
-              InvalidRequestErrorType.invalid_param
-            );
-          }
-          atSingleBlock = true;
-          blockHeight = blockParams.blockHeight;
-        } else {
-          blockHeight = await getBlockHeight(untilBlock, req, res, next, db);
-        }
+  //     const response = await db.sqlTransaction(async sql => {
+  //       const blockParams = getBlockParams(req, res, next);
+  //       let atSingleBlock = false;
+  //       let blockHeight = 0;
+  //       if (blockParams.blockHeight) {
+  //         if (untilBlock) {
+  //           throw new InvalidRequestError(
+  //             `can't handle until_block and block_height in the same request`,
+  //             InvalidRequestErrorType.invalid_param
+  //           );
+  //         }
+  //         atSingleBlock = true;
+  //         blockHeight = blockParams.blockHeight;
+  //       } else {
+  //         blockHeight = await getBlockHeight(untilBlock, req, res, next, db);
+  //       }
 
-        const limit = getPagingQueryLimit(ResourceType.Tx, req.query.limit);
-        const offset = parsePagingQueryInput(req.query.offset ?? 0);
-        const { results: txResults, total } = await db.getAddressTxsWithAssetTransfers({
-          stxAddress: stxAddress,
-          limit,
-          offset,
-          blockHeight,
-          atSingleBlock,
-        });
+  //       const limit = getPagingQueryLimit(ResourceType.Tx, req.query.limit);
+  //       const offset = parsePagingQueryInput(req.query.offset ?? 0);
+  //       const { results: txResults, total } = await db.getAddressTxsWithAssetTransfers({
+  //         stxAddress: stxAddress,
+  //         limit,
+  //         offset,
+  //         blockHeight,
+  //         atSingleBlock,
+  //       });
 
-        const results = await Bluebird.mapSeries(txResults, async entry => {
-          const txQuery = await getTxFromDataStore(db, {
-            txId: entry.tx.tx_id,
-            dbTx: entry.tx,
-            includeUnanchored: blockParams.includeUnanchored ?? false,
-          });
-          if (!txQuery.found) {
-            throw new Error('unexpected tx not found -- fix tx enumeration query');
-          }
-          const result = {
-            tx: txQuery.result,
-            stx_sent: entry.stx_sent.toString(),
-            stx_received: entry.stx_received.toString(),
-            stx_transfers: entry.stx_transfers.map(transfer => ({
-              amount: transfer.amount.toString(),
-              sender: transfer.sender,
-              recipient: transfer.recipient,
-            })),
-            ft_transfers: entry.ft_transfers.map(transfer => ({
-              asset_identifier: transfer.asset_identifier,
-              amount: transfer.amount.toString(),
-              sender: transfer.sender,
-              recipient: transfer.recipient,
-            })),
-            nft_transfers: entry.nft_transfers.map(transfer => {
-              const parsedClarityValue = decodeClarityValueToRepr(transfer.value);
-              const nftTransfer = {
-                asset_identifier: transfer.asset_identifier,
-                value: {
-                  hex: transfer.value,
-                  repr: parsedClarityValue,
-                },
-                sender: transfer.sender,
-                recipient: transfer.recipient,
-              };
-              return nftTransfer;
-            }),
-          };
-          return result;
-        });
+  //       const results = await Bluebird.mapSeries(txResults, async entry => {
+  //         const txQuery = await getTxFromDataStore(db, {
+  //           txId: entry.tx.tx_id,
+  //           dbTx: entry.tx,
+  //           includeUnanchored: blockParams.includeUnanchored ?? false,
+  //         });
+  //         if (!txQuery.found) {
+  //           throw new Error('unexpected tx not found -- fix tx enumeration query');
+  //         }
+  //         const result = {
+  //           tx: txQuery.result,
+  //           stx_sent: entry.stx_sent.toString(),
+  //           stx_received: entry.stx_received.toString(),
+  //           stx_transfers: entry.stx_transfers.map(transfer => ({
+  //             amount: transfer.amount.toString(),
+  //             sender: transfer.sender,
+  //             recipient: transfer.recipient,
+  //           })),
+  //           ft_transfers: entry.ft_transfers.map(transfer => ({
+  //             asset_identifier: transfer.asset_identifier,
+  //             amount: transfer.amount.toString(),
+  //             sender: transfer.sender,
+  //             recipient: transfer.recipient,
+  //           })),
+  //           nft_transfers: entry.nft_transfers.map(transfer => {
+  //             const parsedClarityValue = decodeClarityValueToRepr(transfer.value);
+  //             const nftTransfer = {
+  //               asset_identifier: transfer.asset_identifier,
+  //               value: {
+  //                 hex: transfer.value,
+  //                 repr: parsedClarityValue,
+  //               },
+  //               sender: transfer.sender,
+  //               recipient: transfer.recipient,
+  //             };
+  //             return nftTransfer;
+  //           }),
+  //         };
+  //         return result;
+  //       });
 
-        const response = {
-          limit,
-          offset,
-          total,
-          results,
-        };
-        return response;
-      });
-      setETagCacheHeaders(res);
-      res.json(response);
-    })
-  );
+  //       const response = {
+  //         limit,
+  //         offset,
+  //         total,
+  //         results,
+  //       };
+  //       return response;
+  //     });
+  //     setETagCacheHeaders(res);
+  //     res.json(response);
+  //   })
+  // );
 
   router.get(
     '/:stx_address/assets',
@@ -475,6 +521,14 @@ export function createAddressRouter(db: PgStore, chainId: ChainID): express.Rout
     })
   );
 
+  done();
+};
+
+const MempoolRoutes: FastifyPluginCallback<Record<never, never>, Server, TypeBoxTypeProvider> = (
+  fastify,
+  _,
+  done
+) => {
   router.get(
     '/:address/mempool',
     mempoolCacheHandler,
@@ -572,5 +626,14 @@ export function createAddressRouter(db: PgStore, chainId: ChainID): express.Rout
     })
   );
 
-  return router;
-}
+  done();
+};
+
+export const V1AddressRoutes: FastifyPluginAsync<
+  Record<never, never>,
+  Server,
+  TypeBoxTypeProvider
+> = async fastify => {
+  await fastify.register(ChainTipRoutes);
+  await fastify.register(MempoolRoutes);
+};
